@@ -3,10 +3,11 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
+#include <StringTokenizer.h>
 #include <secrets.h>
 
 #define PIN       D1
-#define NUMPIXELS 20
+#define NUMPIXELS 72
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 const unsigned long BOT_MTBS = 1000;
@@ -17,6 +18,9 @@ unsigned long bot_lasttime;
 
 const int ledPin = LED_BUILTIN;
 int ledStatus = 0;
+int red;
+int green;
+int blue;
 
 int hexcolorToInt(char upper, char lower) {
   int uVal = (int)upper;
@@ -31,23 +35,20 @@ void getRGB(String hexvalue) {
   hexvalue.toUpperCase();
   char c[7];
   hexvalue.toCharArray(c, 8);
-  int red = hexcolorToInt(c[1], c[2]);
-  int green = hexcolorToInt(c[3], c[4]);
-  int blue = hexcolorToInt(c[5], c[6]);
-  Serial.print("REED: "); Serial.println(red);
-  Serial.print("green: "); Serial.println(green);
-  Serial.print("blue: "); Serial.println(blue);
+  red = hexcolorToInt(c[1], c[2]);
+  green = hexcolorToInt(c[3], c[4]);
+  blue = hexcolorToInt(c[5], c[6]);
 }
 
-void handleNewMessages(int numNewMessages)
-{
+void handleNewMessages(int numNewMessages) {
   Serial.print("handleNewMessages ");
   Serial.println(numNewMessages);
 
-  for (int i = 0; i < numNewMessages; i++)
-  {
+  for (int i = 0; i < numNewMessages; i++) {
     String chat_id = bot.messages[i].chat_id;
     String text = bot.messages[i].text;
+    StringTokenizer tokens(text, " ");
+    String comando = tokens.nextToken();
 
     String from_name = bot.messages[i].from_name;
     if (from_name == "")
@@ -66,55 +67,69 @@ void handleNewMessages(int numNewMessages)
     Serial.printf("longitude....: %f \n",   bot.messages[i].longitude);
     Serial.printf("latitude.....: %f \n\n", bot.messages[i].latitude);
 
-    if (text == "/ledon")
-    {
+    if (comando == "/ledon") {
       digitalWrite(ledPin, LOW); // turn the LED on (HIGH is the voltage level)
       ledStatus = 1;
       bot.sendMessage(chat_id, "Led is ON", "");
     }
 
-    if (text == "/ledoff")
-    {
+    if (comando == "/ledoff") {
       ledStatus = 0;
       digitalWrite(ledPin, HIGH); // turn the LED off (LOW is the voltage level)
       bot.sendMessage(chat_id, "Led is OFF", "");
     }
 
-    if (text == "/status")
-    {
-      if (ledStatus)
-      {
+    if (comando == "/status") {
+      if (ledStatus) {
         bot.sendMessage(chat_id, "Led is ON", "");
       }
-      else
-      {
+      else {
         bot.sendMessage(chat_id, "Led is OFF", "");
       }
     }
 
-    if (text == "/start")
-    {
+    if(comando == "/strip") {
+      Serial.println("STRIP");
+      String pixelnumber = tokens.nextToken();  // # led
+      String pixelcolor = tokens.nextToken();  // color
+      getRGB(pixelcolor);
+      pixels.setPixelColor(pixelnumber.toInt()-1, pixels.Color(red, green, blue));
+      pixels.show();
+      bot.sendMessage(chat_id, "Pixel is setted!", "");
+    }
+
+    if(comando == "/clear") {
+      if(bot.messages[i].chat_id == BOT_OWNERID) {
+        pixels.clear();
+        pixels.show();
+        bot.sendMessage(chat_id, "All pixels cleared", "");
+      } else {
+        bot.sendMessage(chat_id, "Only admin can clear pixels!", "");
+      }
+
+    }
+
+    if (comando == "/start") {
       String welcome = "Hy, " + from_name + ".\n";
       welcome += "This is our Telegram BOT that test ESP8266/ESP32 microcontrollers.\n\n";
       welcome += "/ledon : to switch the internal Led ON\n";
       welcome += "/ledoff : to switch the internal Led OFF\n";
       welcome += "/status : Returns current status of LED\n";
       welcome += "/temp : Returns temperature of ROOM where MCU was installed\n";
-      welcome += "/strip NUM COLOR: change Pixel Color, NUM is a value between 1-20 and COLOR must be in HEXADECIMAL like #FF00FF\n";
+      welcome += "/strip NUM COLOR: change Pixel Color, NUM is a value between 1-72 and COLOR must be in HEXADECIMAL like #FF00FF\n";
       welcome += "/clear : **Admin** Turn all led strip off * Only Chat Owner can execute!\n";
       bot.sendMessage(chat_id, welcome, "Markdown");
     }
   }
 }
 
-void bot_setup()
-{
+void bot_setup() {
   const String commands = F("["
                             "{\"command\":\"ledon\",  \"description\":\"Switch the internal Led ON\"},"
                             "{\"command\":\"ledoff\", \"description\":\"Switch the internal Led OFF\"},"
                             "{\"command\":\"status\", \"description\":\"Returns current status of LED\"},"
                             "{\"command\":\"temp\", \"description\":\"Returns temperature of ROOM where MCU was installed\"},"
-                            "{\"command\":\"strip\", \"description\":\"Change Pixel Color, 2 arguments are needed: NUM is a value between 1-20 and COLOR must be in HEXADECIMAL e.g. **/strip 2 #FF0000** - Turn Pixel #02 Red\"},"
+                            "{\"command\":\"strip\", \"description\":\"Change Pixel Color, 2 arguments are needed: NUM is a value between 1-72 and COLOR must be in HEXADECIMAL e.g. **/strip 2 #FF0000** - Turn Pixel #02 Red\"},"
                             "{\"command\":\"clear\",\"description\":\"**Admin** Turn all led strip off * Only Chat Owner can execute!\"}" // no comma on last command
                             "]");
   bot.setMyCommands(commands);
@@ -128,9 +143,17 @@ void setup() {
   delay(10);
   digitalWrite(ledPin, HIGH); // initialize pin as off (active LOW)
 
+  Serial.println("Comecando 01");
   pixels.begin();
   pixels.clear();
-  pixels.setPixelColor(0, pixels.Color(0, 150, 0));
+  pixels.setBrightness(10);
+
+  pixels.setPixelColor(0, pixels.Color(255, 0, 0));
+  pixels.setPixelColor(1, pixels.Color(0, 255, 0));
+  pixels.setPixelColor(2, pixels.Color(0, 0, 255));
+  pixels.show();
+  delay(500);
+  pixels.clear();
   pixels.show();
 
   // Conectando no WiFiClientSecure
@@ -140,8 +163,7 @@ void setup() {
   Serial.print("Connecting to Wifi SSID ");
   Serial.print(WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED)
-  {
+  while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
     delay(500);
   }
@@ -151,8 +173,7 @@ void setup() {
   // Check NTP/Time, usually it is instantaneous and you can delete the code below.
   Serial.print("Retrieving time: ");
   time_t now = time(nullptr);
-  while (now < 24 * 3600)
-  {
+  while (now < 24 * 3600) {
     Serial.print(".");
     delay(100);
     now = time(nullptr);
@@ -166,12 +187,10 @@ void setup() {
 
 void loop() {
 
-  if (millis() - bot_lasttime > BOT_MTBS)
-  {
+  if (millis() - bot_lasttime > BOT_MTBS) {
     int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
 
-    while (numNewMessages)
-    {
+    while (numNewMessages) {
       Serial.println("got response");
       handleNewMessages(numNewMessages);
       numNewMessages = bot.getUpdates(bot.last_message_received + 1);
