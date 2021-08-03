@@ -1,14 +1,16 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
+#include <Adafruit_BMP085.h>
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 #include <StringTokenizer.h>
 #include <secrets.h>
 
-#define PIN       D1
+#define PIN       D6
 #define NUMPIXELS 72
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_BMP085 bmp;
 
 const unsigned long BOT_MTBS = 1000;
 X509List cert(TELEGRAM_CERTIFICATE_ROOT);
@@ -88,6 +90,18 @@ void handleNewMessages(int numNewMessages) {
       }
     }
 
+    if (comando == "/temp") {
+      String retmessage = "Welcome to Weather Bulletin, sensor is in Limeira City (Brazil)\n";
+      retmessage += "Current temperature :" + String(bmp.readTemperature()) + "ºC.";
+      retmessage += "\nPressure: " + String(bmp.readPressure()) + " Pa";
+      retmessage += "\nAltitude: " + String(bmp.readAltitude(102500)) + " meters";
+      retmessage += "\nSea Level Pressure: " + String(bmp.readSealevelPressure()) + "Pa";
+      retmessage += "\nThanks for asking. This Bulletin was sponsored by **Garage CI&T**";
+      retmessage += "\nJoin on our [Workplace Group](https://ciandt.workplace.com/groups/475277656980794)";
+      retmessage += "\nJoin on our [Google Meet Group](https://mail.google.com/chat/u/0/#chat/space/AAAASAmQt9I)";
+      bot.sendMessage(chat_id, retmessage, "Markdown");
+    }
+
     if(comando == "/strip") {
       Serial.println("STRIP");
       String pixelnumber = tokens.nextToken();  // # led
@@ -123,6 +137,34 @@ void handleNewMessages(int numNewMessages) {
   }
 }
 
+void checkTemperature() {
+  Serial.print("Temperature = ");
+  Serial.print(bmp.readTemperature());
+  Serial.println(" *C");
+
+  Serial.print("Pressure = ");
+  Serial.print(bmp.readPressure());
+  Serial.println(" Pa");
+
+  // Calculate altitude assuming 'standard' barometric
+  // pressure of 1013.25 millibar = 101325 Pascal
+  Serial.print("Altitude = ");
+  Serial.print(bmp.readAltitude());
+  Serial.println(" meters");
+
+  Serial.print("Pressure at sealevel (calculated) = ");
+  Serial.print(bmp.readSealevelPressure());
+  Serial.println(" Pa");
+
+// you can get a more precise measurement of altitude
+// if you know the current sea level pressure which will
+// vary with weather and such. If it is 1015 millibars
+// that is equal to 101500 Pascals.
+  Serial.print("Real altitude = ");
+  Serial.print(bmp.readAltitude(102500));
+  Serial.println(" meters");
+}
+
 void bot_setup() {
   const String commands = F("["
                             "{\"command\":\"ledon\",  \"description\":\"Switch the internal Led ON\"},"
@@ -143,7 +185,6 @@ void setup() {
   delay(10);
   digitalWrite(ledPin, HIGH); // initialize pin as off (active LOW)
 
-  Serial.println("Comecando 01");
   pixels.begin();
   pixels.clear();
   pixels.setBrightness(10);
@@ -155,6 +196,10 @@ void setup() {
   delay(500);
   pixels.clear();
   pixels.show();
+
+  if (!bmp.begin()) {
+	  Serial.println("Could not find a valid BMP085 sensor, check wiring!");
+  }
 
   // Conectando no WiFiClientSecure
 // attempt to connect to Wifi network:
@@ -183,6 +228,7 @@ void setup() {
   bot_setup();
 
   getRGB("#FF00FF");
+  checkTemperature();
 }
 
 void loop() {
